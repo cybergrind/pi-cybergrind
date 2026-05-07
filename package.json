@@ -1,0 +1,13 @@
+{
+	"name": "pi-cybergrind",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Personal pi extensions — tmux scroll and friends",
+	"keywords": ["pi-package"],
+	"pi": {
+		"extensions": ["./extensions"]
+	},
+	"peerDependencies": {
+		"@mariozechner/pi-coding-agent": "*"
+	}
+}
