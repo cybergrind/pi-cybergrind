@@ -1,0 +1,10 @@
+{
+	"tui.editor.deleteCharForward": ["delete"],
+	"tui.editor.deleteToLineStart": [],
+	"app.exit": [],
+	"app.session.delete": [],
+	"app.tree.filter.default": [],
+	"app.tree.filter.userOnly": [],
+	"tui.select.up": ["up", "ctrl+p"],
+	"tui.select.down": ["down", "ctrl+n"]
+}
