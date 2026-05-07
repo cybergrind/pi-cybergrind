@@ -16,15 +16,15 @@ pi-cybergrind/
 
 ```bash
 git clone git@github.com:cybergrind/pi-cybergrind.git ~/devel/github/pi-cybergrind
+cd ~/devel/github/pi-cybergrind
 
-# Register the package with pi
-pi install ~/devel/github/pi-cybergrind
-
-# Symlink keybindings (pi has no package-level keybinding mechanism)
-ln -s ~/devel/github/pi-cybergrind/keybindings.json ~/.pi/agent/keybindings.json
+make install                          # symlinks keybindings.json into ~/.pi/agent/
+pi install $(pwd)                     # registers this package with pi
 ```
 
 Then `/reload` in pi.
+
+`make status` shows the current symlink state. `make uninstall` removes the symlink (and restores any backup `make install` displaced).
 
 ## Extensions
 
