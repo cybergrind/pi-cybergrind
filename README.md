@@ -1,6 +1,7 @@
 # pi-cybergrind
 
 Personal [pi](https://github.com/badlogic/pi-mono) extension package and keybinding overrides.
+Pi source code is located at `../../opensource/pi-mono`
 
 ## Layout
 

@@ -6,5 +6,6 @@
 	"app.tree.filter.default": [],
 	"app.tree.filter.userOnly": [],
 	"tui.select.up": ["up", "ctrl+p"],
-	"tui.select.down": ["down", "ctrl+n"]
+	"tui.select.down": ["down", "ctrl+n"],
+	"tui.input.newLine": ["shift+enter", "ctrl+j"]
 }
