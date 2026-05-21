@@ -11,7 +11,6 @@ pi-cybergrind/
 ├── tsconfig.json               # strict TS config for the extensions
 ├── keybindings.json            # symlinked into ~/.pi/agent/keybindings.json
 └── extensions/
-    ├── tmux-scroll.ts          # ctrl+d → tmux copy-mode half-page scroll-down
     └── tmux-scroll-compose.ts  # ctrl+u → nvim in tmux popup; scroll pi pane while typing
 ```
 
@@ -82,12 +81,6 @@ These ship their own bundled TypeScript. They'll pick up `tsconfig.json` automat
 
 ## Extensions
 
-### `tmux-scroll.ts`
-
-Inside tmux, binds `ctrl+d` to enter copy-mode and scroll a half page down via `tmux send-keys -X halfpage-down`. Press `q` to leave copy-mode. No-op outside tmux.
-
-(`ctrl+u` is intentionally not bound here — it's claimed by `tmux-scroll-compose.ts` below.)
-
 ### `tmux-scroll-compose.ts`
 
 Inside tmux, binds `ctrl+u` to:
@@ -107,6 +100,6 @@ No-op outside tmux. One session at a time. Requires `nvim` on `$PATH` and tmux �
 
 `keybindings.json` does the following:
 
-- Strips `ctrl+d` from every default action (`app.exit`, `tui.editor.deleteCharForward`, `app.session.delete`, `app.tree.filter.default`) so the `tmux-scroll` extension can claim it cleanly.
-- Strips `ctrl+u` from `tui.editor.deleteToLineStart` and `app.tree.filter.userOnly` for the same reason.
+- Strips `ctrl+d` from every default action (`app.exit`, `tui.editor.deleteCharForward`, `app.session.delete`, `app.tree.filter.default`).
+- Strips `ctrl+u` from `tui.editor.deleteToLineStart` and `app.tree.filter.userOnly` so the `tmux-scroll-compose` extension can claim it cleanly.
 - Adds emacs-style `ctrl+p` / `ctrl+n` to `tui.select.up` / `tui.select.down` for select-list navigation.
