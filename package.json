@@ -14,7 +14,7 @@
 		"@mariozechner/pi-coding-agent": "*"
 	},
 	"devDependencies": {
-		"@mariozechner/pi-coding-agent": "^0.73.1",
+		"@earendil-works/pi-coding-agent": "^0.75.4",
 		"@types/node": "^22.10.0",
 		"typescript": "^6.0.0",
 		"typescript-language-server": "^5.3.0"
