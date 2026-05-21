@@ -8,11 +8,6 @@ export default function (pi: ExtensionAPI) {
 		await pi.exec("tmux", ["send-keys", "-X", direction]);
 	};
 
-	pi.registerShortcut("ctrl+u", {
-		description: "tmux copy-mode + half page up",
-		handler: () => enterCopyModeAndScroll("halfpage-up"),
-	});
-
 	pi.registerShortcut("ctrl+d", {
 		description: "tmux copy-mode + half page down",
 		handler: () => enterCopyModeAndScroll("halfpage-down"),
