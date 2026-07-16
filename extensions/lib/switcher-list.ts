@@ -1,4 +1,4 @@
-import type { Component } from "@mariozechner/pi-tui";
+import type { Component } from "@earendil-works/pi-tui";
 import { TOP_LEVEL, type SwitcherItem } from "./switcher.ts";
 
 // SwitcherList — the overlay component shown by /subagent-switch and Alt+S.

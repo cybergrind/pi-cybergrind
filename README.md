@@ -80,7 +80,7 @@ These ship their own bundled TypeScript. They'll pick up `tsconfig.json` automat
 
 ### Notes
 
-- The pi extension API package is currently `@mariozechner/pi-coding-agent` (deprecated upstream, renamed to `@earendil-works/pi-coding-agent`). Both still work today; we'll switch when pi itself migrates.
+- The pi extension API packages are `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` (formerly `@mariozechner/*`). Sources import the new names; `findPiPackageBin()` in `extensions/lib/pi-runner.ts` still probes the old name as a runtime fallback for older installs.
 - `tsconfig.json` uses `nodenext` module resolution to match pi-mono's own build. ESM-style `.js` import suffixes are *not* required because `noEmit` is on — this config only powers LSP/typecheck.
 
 ## Extensions

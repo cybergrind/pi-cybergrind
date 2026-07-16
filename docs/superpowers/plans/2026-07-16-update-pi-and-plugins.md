@@ -30,10 +30,10 @@ The current pi-cybergrind code only uses basic `ExtensionAPI` / `ExtensionContex
 
 ## Task 1: Prepare the Repositories
 
-- [ ] **Step 1.1: Decide which pi clone is canonical.**  
+- [x] **Step 1.1: Decide which pi clone is canonical.**  
   The `pi` alias points to `/home/kpi/devel/opensource/pi-mono/pi-test.sh`, so treat that as the runtime source. Keep `/mnt/extra/1000/devel/opensource/pi-mono` in sync or repoint the alias if the dev clone is canonical.
 
-- [ ] **Step 1.2: Save pi-cybergrind WIP.**  
+- [x] **Step 1.2: Save pi-cybergrind WIP.**  
   ```bash
   cd /mnt/extra/1000/devel/github/pi-cybergrind
   git status
@@ -43,14 +43,14 @@ The current pi-cybergrind code only uses basic `ExtensionAPI` / `ExtensionContex
   (Alternatively: `git stash push -u -m "pre-pi-update"`.)  
   Note: `git add -A` also picks up the untracked `.pi/`, `.projectile`, `.yamllint`, and `skills/` — review `git status` first and drop anything not meant for the WIP commit. `.envrc` is covered by `.gitignore` (verified with `git check-ignore`), so it will not be staged.
 
-- [ ] **Step 1.3: Save or stash changes in the runtime pi clone.**  
+- [x] **Step 1.3: Save or stash changes in the runtime pi clone.**  
   ```bash
   cd /home/kpi/devel/opensource/pi-mono
   git status
   ```  
   Commit or stash the modified `packages/ai/src/image-models.generated.ts`. Leave untracked files (`.envrc`, `CLAUDE.md`, `FORME.md`, `.#FORME.md`, `prev`) as-is.
 
-- [ ] **Step 1.4: (Optional) Sync the dev mirror.**  
+- [x] **Step 1.4: (Optional) Sync the dev mirror.**  
   ```bash
   cd /mnt/extra/1000/devel/opensource/pi-mono
   git fetch origin --tags
@@ -61,26 +61,26 @@ The current pi-cybergrind code only uses basic `ExtensionAPI` / `ExtensionContex
 
 ## Task 2: Update pi to v0.80.7
 
-- [ ] **Step 2.1: Fetch and check out the release.**  
+- [x] **Step 2.1: Fetch and check out the release.**  
   ```bash
   cd /home/kpi/devel/opensource/pi-mono
   git fetch origin --tags
   git checkout v0.80.7
   ```
 
-- [ ] **Step 2.2: Install dependencies.**  
+- [x] **Step 2.2: Install dependencies.**  
   ```bash
   npm ci --ignore-scripts
   ```
 
-- [ ] **Step 2.3: Run the project check.**  
+- [x] **Step 2.3: Run the project check.**  
   ```bash
   npm run check
   git status
   ```  
   Expected: passes with no errors. Note that `npm run check` includes `biome check --write`, which can modify files — on a clean tag checkout it should be a no-op, but run `git status` afterward to confirm the detached-HEAD checkout is still clean. Generated files (e.g., `packages/ai/src/image-models.generated.ts`) may change; that is normal.
 
-- [ ] **Step 2.4: Smoke-test the pi binary.**  
+- [x] **Step 2.4: Smoke-test the pi binary.**  
   ```bash
   ./pi-test.sh --help
   ./pi-test.sh --version
@@ -92,7 +92,7 @@ The current pi-cybergrind code only uses basic `ExtensionAPI` / `ExtensionContex
 
 ## Task 3: Update pi-cybergrind Dependencies
 
-- [ ] **Step 3.1: Edit `package.json`.**  
+- [x] **Step 3.1: Edit `package.json`.**  
   - `devDependencies`:
     - `@earendil-works/pi-coding-agent`: `"0.80.7"`
   - Add to `devDependencies`:
@@ -101,7 +101,7 @@ The current pi-cybergrind code only uses basic `ExtensionAPI` / `ExtensionContex
     - Replace `@mariozechner/pi-coding-agent: "*"` with `@earendil-works/pi-coding-agent: "*"`, or remove the peer dependency.
   - Do **not** add `typebox` as a direct dependency; it remains a transitive dependency.
 
-- [ ] **Step 3.2: Reinstall from scratch.**  
+- [x] **Step 3.2: Reinstall from scratch.**  
   A plain `npm install` after removing the `@mariozechner` peer dependency does not reliably prune the old packages from `node_modules`; stale `@mariozechner/*@0.73.1` leftovers would let a missed import still typecheck. Start clean:  
   ```bash
   cd /mnt/extra/1000/devel/github/pi-cybergrind
@@ -110,7 +110,7 @@ The current pi-cybergrind code only uses basic `ExtensionAPI` / `ExtensionContex
   ```  
   Note: `package-lock.json` is listed in `.gitignore`, so the refreshed lockfile stays local-only (see Step 8.1).
 
-- [ ] **Step 3.3: Verify the installed packages.**  
+- [x] **Step 3.3: Verify the installed packages.**  
   ```bash
   cat node_modules/@earendil-works/pi-coding-agent/package.json | grep version
   cat node_modules/@earendil-works/pi-tui/package.json | grep version
@@ -122,7 +122,7 @@ The current pi-cybergrind code only uses basic `ExtensionAPI` / `ExtensionContex
 
 ## Task 4: Migrate Source Imports
 
-- [ ] **Step 4.1: Replace stale package imports.**  
+- [x] **Step 4.1: Replace stale package imports.**  
   **Exclude `extensions/lib/pi-runner.ts`:** its `findPiPackageBin()` (around line 130) intentionally probes both `@earendil-works/pi-coding-agent` and `@mariozechner/pi-coding-agent` in `node_modules` as a runtime fallback for older installs — a blanket sed would turn that array into a duplicated entry and silently delete the fallback. `pi-runner.ts` has no `@mariozechner` imports, only this string literal, so excluding the file loses nothing.  
   ```bash
   cd /mnt/extra/1000/devel/github/pi-cybergrind
@@ -131,20 +131,20 @@ The current pi-cybergrind code only uses basic `ExtensionAPI` / `ExtensionContex
     -e 's|@mariozechner/pi-tui|@earendil-works/pi-tui|g' {} +
   ```
 
-- [ ] **Step 4.2: Verify no stale references remain.**  
+- [x] **Step 4.2: Verify no stale references remain.**  
   ```bash
   grep -Rn '@mariozechner' extensions test
   ```  
   Expected: exactly one match — the intentional dual-name fallback array in `extensions/lib/pi-runner.ts` (`findPiPackageBin`). Any other match is a missed import.
 
-- [ ] **Step 4.3: Update `README.md` import note.**  
+- [x] **Step 4.3: Update `README.md` import note.**  
   Replace the note that says both package names still work with a statement that the package now uses `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui`.
 
 ---
 
 ## Task 5: Typecheck and Adapt to API Changes
 
-- [ ] **Step 5.1: Run the type checker.**  
+- [x] **Step 5.1: Run the type checker.**  
   ```bash
   cd /mnt/extra/1000/devel/github/pi-cybergrind
   npm run typecheck
@@ -158,7 +158,7 @@ The current pi-cybergrind code only uses basic `ExtensionAPI` / `ExtensionContex
   - `SessionBeforeCompactEvent` / `SessionCompactEvent` have new `reason` and `willRetry` fields. The current code does not handle these events.
   - If you import from `@earendil-works/pi-ai` directly, use the `/compat` entrypoint for the old global API or migrate to `createModels()`.
 
-- [ ] **Step 5.3: Re-run typecheck after fixes.**  
+- [x] **Step 5.3: Re-run typecheck after fixes.**  
   ```bash
   npm run typecheck
   ```  
@@ -168,20 +168,20 @@ The current pi-cybergrind code only uses basic `ExtensionAPI` / `ExtensionContex
 
 ## Task 6: Run Tests
 
-- [ ] **Step 6.1: Run unit tests.**  
+- [x] **Step 6.1: Run unit tests.**  
   ```bash
   npm run test
   ```  
   Expected: all tests pass.
 
-- [ ] **Step 6.2: Run subagent smoke test.**  
+- [x] **Step 6.2: Run subagent smoke test.**  
   Ensure `KIMI_API_KEY` is loaded (via `direnv` or `export`).  
   ```bash
   PI_CMD=/home/kpi/devel/opensource/pi-mono/pi-test.sh npm run test:subagent
   ```  
   Expected: output ends with `[smoke] PASS`.
 
-- [ ] **Step 6.3: Run interactive subagent smoke test.**  
+- [x] **Step 6.3: Run interactive subagent smoke test.**  
   ```bash
   PI_CMD=/home/kpi/devel/opensource/pi-mono/pi-test.sh npm run test:interactive
   ```  
@@ -194,16 +194,16 @@ The current pi-cybergrind code only uses basic `ExtensionAPI` / `ExtensionContex
 
 ## Task 7: Interactive Verification in pi
 
-- [ ] **Step 7.1: Register the plugin with the updated pi.**  
+- [x] **Step 7.1: Register the plugin with the updated pi.**  
   ```bash
   cd /mnt/extra/1000/devel/github/pi-cybergrind
   /home/kpi/devel/opensource/pi-mono/pi-test.sh install $(pwd)
   ```
 
-- [ ] **Step 7.2: Reload extensions.**  
+- [x] **Step 7.2: Reload extensions.**  
   Start `pi` and run `/reload`.
 
-- [ ] **Step 7.3: Verify each extension.**  
+- [x] **Step 7.3: Verify each extension.**  
   - `/subagent <task>` — nested run completes and result is delivered.
   - `/subagent-interactive <task>` then `Alt+S` — switcher opens, focus changes, and input routes to the subagent.
   - In tmux, press `ctrl+u` — nvim popup opens, scrolls the pi pane, and syncs on exit.
@@ -216,7 +216,7 @@ The current pi-cybergrind code only uses basic `ExtensionAPI` / `ExtensionContex
 
 ## Task 8: Commit and Document
 
-- [ ] **Step 8.1: Commit pi-cybergrind changes.**  
+- [x] **Step 8.1: Commit pi-cybergrind changes.**  
   `package-lock.json` is listed in `.gitignore`, so do **not** pass it to `git add` — naming an ignored path explicitly makes `git add` fail. The lockfile stays local-only per current repo policy; if you want it tracked instead, remove it from `.gitignore` first as a deliberate policy change.  
   ```bash
   cd /mnt/extra/1000/devel/github/pi-cybergrind
@@ -224,10 +224,10 @@ The current pi-cybergrind code only uses basic `ExtensionAPI` / `ExtensionContex
   git commit -m "chore: update pi dependency to v0.80.7 and migrate imports"
   ```
 
-- [ ] **Step 8.2: Commit or tag the pi update.**  
+- [x] **Step 8.2: Commit or tag the pi update.**  
   The runtime clone is now on the `v0.80.7` tag with a detached HEAD — that is fine for a tag-pinned install; don't be surprised by `git status` reporting it. No extra commit is needed unless you applied local changes on top.
 
-- [ ] **Step 8.3: Update the plugin README.**  
+- [x] **Step 8.3: Update the plugin README.**  
   Ensure the dependency and install sections reflect `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui`.
 
 ---
@@ -248,15 +248,26 @@ The current pi-cybergrind code only uses basic `ExtensionAPI` / `ExtensionContex
 
 ## Verification Checklist
 
-- [ ] `pi --version` reports `v0.80.7`.
-- [ ] `node_modules/@mariozechner` does not exist, and the only `@mariozechner` reference in sources is the `findPiPackageBin` fallback in `extensions/lib/pi-runner.ts`.
-- [ ] `npm run typecheck` in `pi-cybergrind` passes.
-- [ ] `npm run test` in `pi-cybergrind` passes.
-- [ ] `npm run test:subagent` passes.
-- [ ] `npm run test:interactive` passes.
-- [ ] `/subagent`, `/subagent-interactive`, `Alt+S`, and `ctrl+u` work in a live pi session.
+- [x] `pi --version` reports `v0.80.7`.
+- [x] `node_modules/@mariozechner` does not exist, and the only `@mariozechner` reference in sources is the `findPiPackageBin` fallback in `extensions/lib/pi-runner.ts`.
+- [x] `npm run typecheck` in `pi-cybergrind` passes.
+- [x] `npm run test` in `pi-cybergrind` passes.
+- [x] `npm run test:subagent` passes.
+- [x] `npm run test:interactive` passes.
+- [x] `/subagent`, `/subagent-interactive`, and `Alt+S` work in a live pi session (verified via scripted tmux).
+- [ ] `ctrl+u` nvim popup — extension loads cleanly, but `tmux display-popup` needs an attached client, so verify manually in a real terminal.
 
 ---
+
+## Execution Notes (2026-07-16)
+
+- **Step 2.4:** `pi -p "Say exactly: ok"` initially returned 401 — the `KIMI_API_KEY` in `pi-cybergrind/.envrc` is expired/invalid. The key in `pi-mono/.envrc` works; all smoke tests were run with that one sourced. **Action item: refresh the key behind `pi-cybergrind/.envrc`.**
+- **Step 5.2:** Not needed — typecheck passed with zero changes after the import rename.
+- **Step 7.1:** Skipped the `pi install` — the plugin is already registered in `~/.pi/agent/settings.json` via `/home/kpi/devel/github/pi-cybergrind`, which is a symlink to this repo. Installing `$(pwd)` would have created a duplicate package entry and loaded every extension twice.
+- **Step 7.3:** pi v0.80.x introduces a project-trust prompt on first start (accepted) and **auto-migrates `.pi/commands/` → `.pi/prompts/`**, which pi now serves natively as slash commands. The plugin's `dynamic-commands` extension still scans `.pi/commands` (now migrated away on every start) and `.claude/commands` (verified working via a test `/bar` command). Consider updating `dynamic-commands.ts` to drop the `.pi/commands` dir or document that pi owns it now.
+- **Step 7.3 (Alt+S):** The shortcut only fires when tmux is configured with `set -g extended-keys-format csi-u` (pi prints a startup warning about this). With the default xterm format the keypress never reaches the extension. Add the setting to `~/.tmux.conf`.
+- **Step 7.3 (ctrl+u):** Not verifiable in a detached tmux session (`display-popup` needs an attached client); extension loads without errors — confirm manually.
+- **Task 9:** Not done (optional). `agent_settled` adoption remains open.
 
 ## Notes
 
