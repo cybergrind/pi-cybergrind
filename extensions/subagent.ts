@@ -159,8 +159,18 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("subagent-abort", {
-		description: "Abort a running subagent by run-id prefix",
+		description: "Abort a running subagent by run-id prefix; inside a subagent, exits this pi process",
 		handler: async (rawArgs, ctx) => {
+			// Inside a nested subagent (one-shot child or interactive RPC child),
+			// /subagent-abort means "abort *me*" — gracefully exit this pi so the
+			// parent's runner sees the process close and marks the run finished.
+			const { shouldActivate } = await import("./lib/switcher.ts");
+			if (!shouldActivate(process.env)) {
+				ctx.ui.notify("subagent: exiting on /subagent-abort", "info");
+				ctx.shutdown();
+				return;
+			}
+
 			const prefix = rawArgs.trim();
 			if (!prefix) {
 				ctx.ui.notify("/subagent-abort: pass a run-id prefix (first 8 chars suffice)", "warning");

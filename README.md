@@ -11,7 +11,11 @@ pi-cybergrind/
 ├── tsconfig.json               # strict TS config for the extensions
 ├── keybindings.json            # symlinked into ~/.pi/agent/keybindings.json
 └── extensions/
-    └── tmux-scroll-compose.ts  # ctrl+u → nvim in tmux popup; scroll pi pane while typing
+    ├── tmux-scroll-compose.ts  # ctrl+u → nvim in tmux popup; scroll pi pane while typing
+    ├── subagent.ts             # `subagent` tool + /subagent — one-shot nested pi dispatch
+    ├── subagent-switch.ts      # alt+s switcher — focus & talk to interactive subagents
+    └── lib/                    # shared runners/registries (pi-runner, run-registry,
+                                #   agent-pool, focus-router, rpc-agent-client, switcher)
 ```
 
 ## Install
@@ -96,6 +100,20 @@ Uses `display-popup` (not `split-window`) so pi's pane is not resized — preser
 
 No-op outside tmux. One session at a time. Requires `nvim` on `$PATH` and tmux ≥ 3.2 (for `display-popup`).
 
+### `subagent-switch.ts`
+
+A focus layer over *interactive* subagents — long-lived nested `pi --mode rpc` children you can switch to and chat with (distinct from `subagent.ts`'s one-shot dispatches).
+
+- `/subagent-interactive <task>` spawns an interactive subagent into the pool and kicks off `<task>`.
+- **`Alt+S`** (or `/subagent-switch`) opens a floating switcher in the **middle-right** of the screen, listing the top-level session plus every interactive subagent (status glyph, name, last output). `↑↓` / `ctrl+p` `ctrl+n` / `j` `k` move, `⏎` focuses, `x` closes the selected subagent (terminates and removes it; the top-level row can't be closed), `esc` cancels. The list refreshes live while open.
+- While **focused** on a subagent, what you type is delivered into *that* subagent's loop instead of the top level — a fresh prompt when it's idle, a follow-up (appended after the current turn) when it's busy. A widget above the editor shows who has focus.
+- **`Esc`** (or `Ctrl+[`) while focused **interrupts** a busy subagent's turn; when the subagent is idle it drops focus back to the top level.
+- Slash commands always reach the top level, even while focused, so you can `/subagent-switch` or `Alt+S` to switch or leave at any time. Focus auto-clears if the focused subagent stops.
+
+Dormant inside nested subagents (`PI_SUBAGENT_DEPTH` / `PI_INTERACTIVE_SUBAGENT`) so it never routes input into itself. Inside a sub-agent, `/subagent-abort` means "abort *me*" — it calls `ctx.shutdown()` so this pi exits gracefully and the parent's runner observes the close. Resolves pi via `resolvePiCommand()` — set `PI_CMD` if `pi` is a shell alias or wrapper rather than a binary on `PATH`.
+
+Smoke-test the live loop against a real pi: `npm run test:interactive` (honors `PI_CMD`).
+
 ## Keybindings
 
 `keybindings.json` does the following:
@@ -103,3 +121,5 @@ No-op outside tmux. One session at a time. Requires `nvim` on `$PATH` and tmux �
 - Strips `ctrl+d` from every default action (`app.exit`, `tui.editor.deleteCharForward`, `app.session.delete`, `app.tree.filter.default`).
 - Strips `ctrl+u` from `tui.editor.deleteToLineStart` and `app.tree.filter.userOnly` so the `tmux-scroll-compose` extension can claim it cleanly.
 - Adds emacs-style `ctrl+p` / `ctrl+n` to `tui.select.up` / `tui.select.down` for select-list navigation.
+
+`alt+s` (subagent switcher) and `ctrl+u` (tmux-scroll-compose) are claimed by the extensions themselves via `registerShortcut`, not configured here. `alt+s` is used because pi reserves most `ctrl+<letter>` chords for built-ins (e.g. `ctrl+g` = open external editor).
