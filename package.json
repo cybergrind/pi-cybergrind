@@ -3,16 +3,21 @@
 	"version": "0.1.0",
 	"private": true,
 	"description": "Personal pi extensions — tmux scroll and friends",
-	"keywords": ["pi-package"],
+	"keywords": [
+		"pi-package"
+	],
 	"pi": {
-		"extensions": ["./extensions"]
+		"extensions": [
+			"./extensions"
+		]
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",
 		"test": "node --test --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/*.test.ts",
 		"test:subagent": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/subagent-smoke.ts",
 		"test:interactive": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/subagent-interactive-smoke.ts",
-		"test:all": "npm run test && npm run test:subagent && npm run test:interactive"
+		"test:mcp": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/mcp-smoke.ts",
+		"test:all": "npm run test && npm run test:subagent && npm run test:interactive && npm run test:mcp"
 	},
 	"peerDependencies": {
 		"@earendil-works/pi-coding-agent": "*"
@@ -23,5 +28,8 @@
 		"@types/node": "^22.10.0",
 		"typescript": "^6.0.0",
 		"typescript-language-server": "^5.3.0"
+	},
+	"dependencies": {
+		"pi-mcp-adapter": "2.34.0"
 	}
 }

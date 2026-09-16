@@ -114,6 +114,34 @@ Dormant inside nested subagents (`PI_SUBAGENT_DEPTH` / `PI_INTERACTIVE_SUBAGENT`
 
 Smoke-test the live loop against a real pi: `npm run test:interactive` (honors `PI_CMD`).
 
+### `mcp.ts`
+
+MCP servers via [`pi-mcp-adapter`](https://www.npmjs.com/package/pi-mcp-adapter), loaded **only when the project asks for it**. pi has no built-in MCP; the adapter exposes one `mcp` proxy tool (search / describe / call) instead of registering every server tool, and connects servers lazily on first use.
+
+The gate runs at extension load (and again on `/reload`):
+
+- `.mcp.json` or `.pi/mcp.json` exists in the session cwd → the adapter is imported and installed. It then reads its normal config layering (`~/.config/mcp/mcp.json` < `~/.pi/agent/mcp.json` < `.mcp.json` < `.pi/mcp.json`).
+- Neither exists → the adapter is not imported: no `mcp` tool, no adapter commands, zero context cost. Only a tiny `/mcp` stub is registered so MCP can be enabled on demand for the current session:
+  - `/mcp` or `/mcp status` explains why MCP is off and how to turn it on.
+  - `/mcp setup` (or any other adapter subcommand, e.g. `/mcp add …`) loads the adapter into the running session and forwards the call, so you land straight in the adapter's setup panel for initial configuration.
+  - `/mcp load` loads the adapter with whatever config it finds (useful with global-only configs). After loading, `/mcp` is the adapter's own command; repeated loads are no-ops.
+- `PI_MCP=off` keeps the stub but never auto-loads, even with a project config; an explicit `/mcp load` still wins.
+- `PI_MCP=off` disables it unconditionally; `PI_MCP=on` forces it (e.g. to use only global servers in a project without its own file). `PI_MCP_DEBUG=1` logs the decision to stderr.
+
+Example `.mcp.json` for a local Binary Ninja UI MCP server:
+
+```json
+{
+  "mcpServers": {
+    "binaryninja": { "url": "http://127.0.0.1:24642/mcp", "lifecycle": "lazy" }
+  }
+}
+```
+
+Adapter settings (`toolPrefix`, `directTools`, `approveTools`, `scriptMode`, …) go in those config files, not in the wrapper — see the adapter README. `/mcp` shows status; `/mcp disable <server>` + `/reload` turns one off.
+
+Smoke-test against a real server: `npm run test:mcp` (honors `PI_CMD`, `BINJA_MCP_URL`). It exits 2 with a `SKIP` line when the server is unreachable, so `test:all` never passes silently without it.
+
 ## Keybindings
 
 `keybindings.json` does the following:
