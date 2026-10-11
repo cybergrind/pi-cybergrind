@@ -228,7 +228,7 @@ export async function runChildPi(opts: RunOptions): Promise<RunResult> {
 	let stderr = "";
 	let pid: number | undefined;
 
-	const onPiEvent = (evt: { type?: string; message?: AssistantMessage; tool?: string; name?: string }) => {
+	const onPiEvent = (evt: { type?: string; message?: AssistantMessage; toolName?: string; tool?: string; name?: string }) => {
 		if (!evt || typeof evt !== "object") return;
 		const at = Date.now();
 
@@ -258,8 +258,9 @@ export async function runChildPi(opts: RunOptions): Promise<RunResult> {
 			return;
 		}
 
-		if (evt.type === "tool_call_start") {
-			appendEvent(run.id, { type: "tool_call", at, tool: evt.tool ?? evt.name ?? "tool" });
+		// pi emits `tool_execution_start` with `toolName`; `tool_call_start` is kept for older builds.
+		if (evt.type === "tool_execution_start" || evt.type === "tool_call_start") {
+			appendEvent(run.id, { type: "tool_call", at, tool: evt.toolName ?? evt.tool ?? evt.name ?? "tool" });
 			onChange();
 		}
 	};

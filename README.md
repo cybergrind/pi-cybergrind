@@ -12,6 +12,7 @@ pi-cybergrind/
 ├── keybindings.json            # symlinked into ~/.pi/agent/keybindings.json
 └── extensions/
     ├── tmux-scroll-compose.ts  # ctrl+u → nvim in tmux popup; scroll pi pane while typing
+    ├── prompt-history.ts       # Up/Down prompt history that survives across sessions
     ├── subagent.ts             # `subagent` tool + /subagent — one-shot nested pi dispatch
     ├── subagent-switch.ts      # alt+s switcher — focus & talk to interactive subagents
     └── lib/                    # shared runners/registries (pi-runner, run-registry,
@@ -41,7 +42,37 @@ Then `/reload` in pi.
 
 ```bash
 npm run typecheck     # tsc --noEmit against tsconfig.json
+npm test              # unit tests, no pi process
 ```
+
+### Tests against a real pi
+
+Run these before and after updating pi. Each starts real pi processes and makes a few model calls; set `PI_CMD` when `pi` is a wrapper or alias rather than a binary on `PATH`.
+
+```bash
+npm run test:subagent      # one-shot runner: JSON events, tool calls, extra system prompt
+npm run test:interactive   # RPC subagent: prompt, follow-up, interrupt, stop
+npm run test:mcp           # MCP gate and adapter against a real MCP server
+npm run test:extensions    # package load, slash commands, command templates, subagent tool
+npm run test:tui           # prompt history, switcher overlay, input redirect, /mcp panel, Ctrl+U scroll-compose
+npm run test:all           # unit tests plus all of the above
+```
+
+`test:tui` drives pi inside a private tmux server and needs `tmux`, `nvim` and `script`. It runs with your own pi settings, as does the last step of `test:extensions`, so both also catch settings that a pi update made necessary.
+
+### pi 1.x settings
+
+Two entries in `~/.pi/agent/settings.json` are needed with pi 1.0 and later:
+
+```json
+{
+  "tuiMode": "regular",
+  "extensions": ["-builtin:mcp"]
+}
+```
+
+- `tuiMode: "regular"` — pi 1.0 made the fullscreen TUI the default. Fullscreen uses the terminal's alternate screen, which has no tmux scrollback, so `tmux-scroll-compose` has nothing to scroll.
+- `-builtin:mcp` — pi 0.99 added built-in MCP support with its own `/mcp`. `mcp.ts` registers `/mcp` too; pi then skips the built-in one and prints a warning on every start (and into every subagent's stderr). Disabling the built-in removes the warning.
 
 ### nvim (nvim-lspconfig + mason)
 
@@ -100,6 +131,18 @@ Uses `display-popup` (not `split-window`) so pi's pane is not resized — preser
 
 No-op outside tmux. One session at a time. Requires `nvim` on `$PATH` and tmux ≥ 3.2 (for `display-popup`).
 
+### `prompt-history.ts`
+
+pi browses submitted prompts with Up/Down, but keeps them in memory, so a new session starts with nothing. This extension makes the history survive: a new session starts with the prompts typed earlier in the same project (session cwd), newest first on Up.
+
+- Everything pi itself puts in the history is stored: prompts, slash commands and `!` commands.
+- The store is `~/.pi/agent/prompt-history.jsonl`, one `{cwd, text, at}` line per prompt, shared by all projects and trimmed automatically. Delete the file to forget everything.
+- Up to 100 prompts are restored per project, the limit of pi's editor.
+- It works by installing pi's own editor class through `ctx.ui.setEditorComponent`, so another extension that replaces the editor would conflict with it.
+- A project reached through a symlink shares its history with the real path.
+- `npm run history:import` merges the prompts of pi's saved sessions (`~/.pi/agent/sessions`) into the store, ordered by time. It can be run again without adding duplicates, and skips sessions whose project directory no longer exists.
+- `PI_PROMPT_HISTORY=off` disables it; `PI_PROMPT_HISTORY_FILE` moves the store.
+
 ### `subagent-switch.ts`
 
 A focus layer over *interactive* subagents — long-lived nested `pi --mode rpc` children you can switch to and chat with (distinct from `subagent.ts`'s one-shot dispatches).
@@ -116,7 +159,7 @@ Smoke-test the live loop against a real pi: `npm run test:interactive` (honors `
 
 ### `mcp.ts`
 
-MCP servers via [`pi-mcp-adapter`](https://www.npmjs.com/package/pi-mcp-adapter), loaded **only when the project asks for it**. pi has no built-in MCP; the adapter exposes one `mcp` proxy tool (search / describe / call) instead of registering every server tool, and connects servers lazily on first use.
+MCP servers via [`pi-mcp-adapter`](https://www.npmjs.com/package/pi-mcp-adapter), loaded **only when the project asks for it**. pi 0.99+ ships its own MCP support, which this extension replaces (see [pi 1.x settings](#pi-1x-settings)); the adapter exposes one `mcp` proxy tool (search / describe / call) instead of registering every server tool, and connects servers lazily on first use.
 
 The gate runs at extension load (and again on `/reload`):
 
@@ -140,7 +183,7 @@ Example `.mcp.json` for a local Binary Ninja UI MCP server:
 
 Adapter settings (`toolPrefix`, `directTools`, `approveTools`, `scriptMode`, …) go in those config files, not in the wrapper — see the adapter README. `/mcp` shows status; `/mcp disable <server>` + `/reload` turns one off.
 
-Smoke-test against a real server: `npm run test:mcp` (honors `PI_CMD`, `BINJA_MCP_URL`). It exits 2 with a `SKIP` line when the server is unreachable, so `test:all` never passes silently without it.
+Smoke-test against a real server: `npm run test:mcp` (honors `PI_CMD`, `BINJA_MCP_URL`). It uses the Binary Ninja server when it is reachable and otherwise a local stdio stub server (`test/fixtures/mcp-stub-server.mjs`), so the adapter path is always exercised.
 
 ## Keybindings
 

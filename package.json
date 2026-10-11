@@ -17,15 +17,21 @@
 		"test:subagent": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/subagent-smoke.ts",
 		"test:interactive": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/subagent-interactive-smoke.ts",
 		"test:mcp": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/mcp-smoke.ts",
-		"test:all": "npm run test && npm run test:subagent && npm run test:interactive && npm run test:mcp"
+		"test:extensions": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/extensions-smoke.ts",
+		"test:tui": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/tui-smoke.ts",
+		"history:import": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/import-prompt-history.ts",
+		"test:all": "npm run test && npm run test:subagent && npm run test:interactive && npm run test:mcp && npm run test:extensions && npm run test:tui"
 	},
 	"peerDependencies": {
-		"@earendil-works/pi-coding-agent": "*"
+		"@earendil-works/pi-coding-agent": "*",
+		"@earendil-works/pi-tui": "*",
+		"typebox": "*"
 	},
 	"devDependencies": {
-		"@earendil-works/pi-coding-agent": "0.85.1",
-		"@earendil-works/pi-tui": "0.85.1",
+		"@earendil-works/pi-coding-agent": "1.1.0",
+		"@earendil-works/pi-tui": "1.1.0",
 		"@types/node": "^22.10.0",
+		"typebox": "1.3.27",
 		"typescript": "^6.0.0",
 		"typescript-language-server": "^5.3.0"
 	},

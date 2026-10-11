@@ -3,17 +3,17 @@
 // Run with:
 //   PI_CMD=/path/to/pi-test.sh npm run test:mcp
 //
-// Requires a Binary Ninja UI MCP server (streamable HTTP, no auth) at
-// BINJA_MCP_URL (default http://127.0.0.1:24642/mcp). If it is unreachable the
-// test prints a SKIP line and exits with code 2 (distinct from pass 0 / fail 1)
-// so the gap is visible in test:all rather than silently passing.
+// Uses a Binary Ninja UI MCP server (streamable HTTP, no auth) at
+// BINJA_MCP_URL (default http://127.0.0.1:24642/mcp) when one is reachable.
+// Otherwise it falls back to the local stdio stub in
+// fixtures/mcp-stub-server.mjs, so the adapter path is always exercised.
 //
 // Runs (each a headless `pi -p --mode json --no-session --no-extensions` with
 // only extensions/mcp.ts and the probe fixture loaded):
 //   A  empty project dir            → adapter must NOT load (no `mcp` tool),
 //                                     but the gated-off `/mcp` stub command exists
 //   B  project dir with .mcp.json   → adapter loads, model searches and calls
-//                                     bn_binary_view_list through the proxy tool
+//                                     the server's tool through the proxy tool
 //   C  empty project dir, PI_MCP=on → adapter loads with zero servers
 
 import { spawn } from "node:child_process";
@@ -21,16 +21,34 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describePiSpawnSpec, resolvePiCommand } from "../extensions/lib/pi-runner.ts";
-import { PROBE_PREFIX } from "./fixtures/mcp-probe.ts";
+import { PROBE_PREFIX } from "./fixtures/probe.ts";
 
 const TIMEOUT_MS = 120_000;
 const BINJA_URL = process.env.BINJA_MCP_URL ?? "http://127.0.0.1:24642/mcp";
-const LIST_TOOL = "bn_binary_view_list";
+
+// The MCP server run B talks to: what to put in .mcp.json, what to search for,
+// which tool to call, and (when known) what its result must contain.
+interface Target {
+	label: string;
+	server: Record<string, unknown>;
+	search: string;
+	tool: string;
+	marker?: string;
+}
 
 // npm scripts run from the repo root; PI_CYBERGRIND_ROOT overrides for ad-hoc runs.
 const ROOT = resolve(process.env.PI_CYBERGRIND_ROOT ?? process.cwd());
 const MCP_EXT = join(ROOT, "extensions/mcp.ts");
-const PROBE_EXT = join(ROOT, "test/fixtures/mcp-probe.ts");
+const PROBE_EXT = join(ROOT, "test/fixtures/probe.ts");
+const STUB_SERVER = join(ROOT, "test/fixtures/mcp-stub-server.mjs");
+
+const STUB_TARGET: Target = {
+	label: "local stub (stdio)",
+	server: { command: process.execPath, args: [STUB_SERVER], lifecycle: "lazy" },
+	search: "smoke_marker",
+	tool: "smoke_marker_get",
+	marker: "MCP-STUB-MARKER-7f3a",
+};
 
 interface ToolStart {
 	type: "tool_execution_start";
@@ -205,7 +223,7 @@ function stderrTail(run: PiRun, lines = 15): string {
 
 const MCP_TOOL_NAMES = new Set(["mcp", "mcpScript"]);
 function isMcpTool(name: string): boolean {
-	return MCP_TOOL_NAMES.has(name) || /^(binaryninja|bn_)/.test(name);
+	return MCP_TOOL_NAMES.has(name) || /^(mcp__|smoke|binaryninja|bn_)/.test(name);
 }
 
 function endsWithTool(value: unknown, tool: string): boolean {
@@ -216,14 +234,19 @@ async function main(): Promise<number> {
 	const spec = resolvePiCommand();
 	log(`resolved pi: ${describePiSpawnSpec(spec)}`);
 
-	let serverName: string;
+	let target = STUB_TARGET;
 	try {
-		serverName = await probeServer();
+		const serverName = await probeServer();
+		target = {
+			label: `${serverName} at ${BINJA_URL}`,
+			server: { url: BINJA_URL, lifecycle: "lazy" },
+			search: "binary_view",
+			tool: "bn_binary_view_list",
+		};
 	} catch (err) {
-		log(`SKIP: Binary Ninja MCP not reachable at ${BINJA_URL}: ${(err as Error).message}`);
-		return 2;
+		log(`Binary Ninja MCP not reachable at ${BINJA_URL} (${(err as Error).message}); using the local stub`);
 	}
-	log(`MCP server reachable: ${serverName} at ${BINJA_URL}`);
+	log(`MCP server: ${target.label}`);
 
 	const f = new Failures();
 	const dirs: string[] = [];
@@ -251,18 +274,18 @@ async function main(): Promise<number> {
 		const projectB = mkProject();
 		writeFileSync(
 			join(projectB, ".mcp.json"),
-			JSON.stringify({ mcpServers: { binaryninja: { url: BINJA_URL, lifecycle: "lazy" } } }, null, 2),
+			JSON.stringify({ mcpServers: { smoke: target.server } }, null, 2),
 		);
 		const b = await runPi({
 			cwd: projectB,
 			prompt:
 				"You have a tool named `mcp` that proxies MCP servers. Do exactly these steps, in order, and do not stop early:\n" +
-				"1. Call mcp with { \"search\": \"binary_view\" }.\n" +
-				`2. Call mcp with { "tool": "${LIST_TOOL}", "args": {} } (use the exact tool name as returned by the search if it is prefixed).\n` +
+				`1. Call mcp with { "search": "${target.search}" }.\n` +
+				`2. Call mcp with { "tool": "${target.tool}", "args": {} } (use the exact tool name as returned by the search if it is prefixed).\n` +
 				"3. Reply with the exact names of the tools found in step 1, one per line, then a blank line, then the raw result of step 2.\n" +
 				"Do not use any other tool. Do not ask questions.",
 		});
-		summarize("B(binja)", b);
+		summarize("B(server)", b);
 		f.check(!b.timedOut, "B: timed out");
 		f.check(b.exitCode === 0, `B: exit code ${b.exitCode}\n${stderrTail(b)}`);
 		f.check(b.tools !== undefined, "B: probe line missing");
@@ -270,16 +293,21 @@ async function main(): Promise<number> {
 		const mcpStarts = b.starts.filter((s) => s.toolName === "mcp");
 		const searchCall = mcpStarts.find((s) => typeof s.args?.search === "string");
 		f.check(searchCall !== undefined, `B: no mcp({search}) call; calls=${JSON.stringify(b.starts.map((s) => [s.toolName, s.args]))}`);
-		const listCall = mcpStarts.find((s) => endsWithTool(s.args?.tool, LIST_TOOL));
-		f.check(listCall !== undefined, `B: no mcp({tool: ${LIST_TOOL}}) call; calls=${JSON.stringify(mcpStarts.map((s) => s.args))}`);
+		// The adapter prefixes tool names with the server name, so the model may
+		// need a second attempt after a "did you mean" reply; judge the last one.
+		const listCall = mcpStarts.filter((s) => endsWithTool(s.args?.tool, target.tool)).at(-1);
+		f.check(listCall !== undefined, `B: no mcp({tool: ${target.tool}}) call; calls=${JSON.stringify(mcpStarts.map((s) => s.args))}`);
 		if (listCall) {
 			const end = b.ends.find((e) => e.toolCallId === listCall.toolCallId);
 			f.check(end !== undefined, "B: no tool_execution_end for the list call");
 			f.check(end?.isError === false, `B: list call errored: ${JSON.stringify(end?.result).slice(0, 300)}`);
 			const resultText = JSON.stringify(end?.result ?? "");
 			f.check(!/"error"\s*:/.test(resultText) || /"ok"\s*:\s*true/.test(resultText), `B: list result looks like an error: ${resultText.slice(0, 300)}`);
+			if (target.marker) {
+				f.check(resultText.includes(target.marker), `B: tool result lacks the server's marker ${target.marker}: ${resultText.slice(0, 300)}`);
+			}
 		}
-		f.check(b.finalText.includes(LIST_TOOL), `B: final text does not mention ${LIST_TOOL}: "${b.finalText.slice(0, 200)}"`);
+		f.check(b.finalText.includes(target.tool), `B: final text does not mention ${target.tool}: "${b.finalText.slice(0, 200)}"`);
 
 		// ---- Run C: env override -----------------------------------------------
 		const c = await runPi({ cwd: mkProject(), env: { PI_MCP: "on" }, prompt: "Reply with exactly the word OK. Use no tools." });
