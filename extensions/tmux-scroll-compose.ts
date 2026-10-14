@@ -1,13 +1,11 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { createWorkspace, waitForExit, workspaceBase, type Workspace } from "./lib/scroll-compose.ts";
 
 const POPUP_H_RATIO = 0.2;
 const MIN_POPUP_H = 5;
 const MAX_POPUP_H = 8;
-const PID_GRACE_MS = 500;
-const POLL_MS = 250;
 
 interface ClientInfo {
 	height: number;
@@ -22,16 +20,6 @@ interface PopupGeom {
 	w: number;
 	h: number;
 }
-
-interface Workspace {
-	tmpfile: string;
-	sentinel: string;
-	pidfile: string;
-	initLua: string;
-	cleanup: () => void;
-}
-
-type ExitKind = "clean" | "killed";
 
 function renderInitLua(piPane: string, sentinel: string, tmpfile: string, pidfile: string): string {
 	const q = (s: string) => JSON.stringify(s);
@@ -97,23 +85,6 @@ function computePopupGeometry(c: ClientInfo): PopupGeom {
 	return { x: 0, y, w: c.width, h };
 }
 
-function createWorkspace(): Workspace {
-	const dir = mkdtempSync(join(tmpdir(), "pi-scroll-compose-"));
-	return {
-		tmpfile: join(dir, "input.txt"),
-		sentinel: join(dir, "done"),
-		pidfile: join(dir, "nvim.pid"),
-		initLua: join(dir, "init.lua"),
-		cleanup: () => {
-			try {
-				rmSync(dir, { recursive: true, force: true });
-			} catch {
-				/* ignore */
-			}
-		},
-	};
-}
-
 function tmux(pi: ExtensionAPI) {
 	return {
 		enterCopyMode: (pane: string) => pi.exec("tmux", ["copy-mode", "-t", pane]),
@@ -163,11 +134,12 @@ async function openScrollCompose(pi: ExtensionAPI, ctx: ExtensionContext): Promi
 	}
 
 	busy = true;
-	const ws = createWorkspace();
 	const t = tmux(pi);
+	let ws: Workspace | undefined;
 	let preserveWorkspace = false;
 
 	try {
+		ws = createWorkspace(workspaceBase(process.env, getAgentDir()));
 		writeFileSync(ws.initLua, renderInitLua(piPane, ws.sentinel, ws.tmpfile, ws.pidfile));
 		writeFileSync(ws.tmpfile, ctx.ui.getEditorText() ?? "");
 
@@ -179,67 +151,42 @@ async function openScrollCompose(pi: ExtensionAPI, ctx: ExtensionContext): Promi
 		// so we do the math here and pass absolute integers.
 		const geom = computePopupGeometry(parseClientInfo((await t.queryClient(piPane)).stdout));
 
-		// Single shell-command string so quoting is unambiguous. mkdtempSync paths are
-		// shell-safe (no quotes/metachars) so single-quote wrap is enough.
+		// Single shell-command string so quoting is unambiguous. Workspace paths
+		// (agent dir + mkdtemp suffix) are assumed shell-safe, so single-quote wrap is enough.
 		// -c "luafile ..." (not -u) so the user's normal init.lua / init.vim loads first
 		// and our bindings + VimLeavePre are layered on top.
 		const launchCmd = `exec nvim -c 'luafile ${ws.initLua}' '${ws.tmpfile}'`;
 
 		// display-popup is an overlay → pi's pane is not resized → pi's TUI does
-		// not trigger a full redraw + scrollback clear.
+		// not trigger a full redraw + scrollback clear. It blocks until the popup
+		// closes and returns nvim's exit code, so the workspace files tell us how
+		// nvim ended; the code is only reported.
 		const popupRes = await t.displayPopup(geom, launchCmd);
-		if (popupRes.code !== 0) {
-			throw new Error(`tmux display-popup failed: code=${popupRes.code} stderr=${popupRes.stderr.trim()}`);
-		}
-
 		const exitKind = await waitForExit(ws.sentinel, ws.pidfile);
 
 		if (exitKind === "clean") {
 			const newText = readFileSync(ws.tmpfile, "utf8").replace(/\n$/, "");
 			ctx.ui.setEditorText(newText);
 			ctx.ui.setStatus("scroll-compose-redraw", undefined);
-		} else {
-			// Belt-and-braces: VimLeavePre normally cancels copy-mode, but on SIGKILL
-			// it never ran, so do it ourselves.
-			await t.cancelCopyMode(piPane).catch(() => {});
+			return;
+		}
+		// VimLeavePre normally cancels copy-mode; it never ran here, so do it ourselves.
+		await t.cancelCopyMode(piPane).catch(() => {});
+		if (exitKind === "killed") {
 			preserveWorkspace = true;
 			ctx.ui.notify(`scroll-compose: nvim exited unexpectedly; draft kept at ${ws.tmpfile}`, "warning");
+		} else {
+			const popup = `display-popup code=${popupRes.code}${popupRes.stderr.trim() ? `: ${popupRes.stderr.trim()}` : ""}`;
+			ctx.ui.notify(
+				`scroll-compose: nvim never loaded ${ws.initLua} (${popup}); is ${dirname(ws.tmpfile)} visible to the tmux server?`,
+				"error",
+			);
 		}
 	} catch (err) {
+		await t.cancelCopyMode(piPane).catch(() => {});
 		ctx.ui.notify(`scroll-compose: ${(err as Error).message}`, "error");
 	} finally {
 		busy = false;
-		if (!preserveWorkspace) ws.cleanup();
+		if (!preserveWorkspace) ws?.cleanup();
 	}
-}
-
-async function waitForExit(sentinel: string, pidfile: string): Promise<ExitKind> {
-	// Brief grace period so we don't race nvim writing the pidfile at startup.
-	await sleep(PID_GRACE_MS);
-	while (true) {
-		if (existsSync(sentinel)) return "clean";
-		if (existsSync(pidfile)) {
-			const pidStr = readFileSync(pidfile, "utf8").trim();
-			const pid = Number.parseInt(pidStr, 10);
-			if (Number.isFinite(pid) && !isProcessAlive(pid)) {
-				// Final check: maybe sentinel was written between checks.
-				if (existsSync(sentinel)) return "clean";
-				return "killed";
-			}
-		}
-		await sleep(POLL_MS);
-	}
-}
-
-function isProcessAlive(pid: number): boolean {
-	try {
-		process.kill(pid, 0);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-function sleep(ms: number): Promise<void> {
-	return new Promise((r) => setTimeout(r, ms));
 }

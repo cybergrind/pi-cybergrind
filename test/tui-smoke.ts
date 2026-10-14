@@ -17,13 +17,17 @@
 //   scroll-compose  Ctrl+U puts the pi pane into tmux copy-mode, opens nvim in
 //                   a popup, and the text written there lands in pi's editor.
 //                   Needs pi to keep the terminal's scrollback (not the
-//                   alternate screen), which this also asserts.
+//                   alternate screen), which this also asserts. nvim is run by
+//                   the tmux server, so its files must not be in pi's temp dir
+//                   (sbox gives pi a private /tmp); pi gets a TMPDIR of its own
+//                   to check that. A stub nvim that never loads our init.lua
+//                   must end in an error, not a stuck "already open".
 //
 // Needs tmux, nvim and script(1). pi runs with the user's real settings, so
 // the result reflects what `pi` does on this machine.
 
 import { execFileSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describePiSpawnSpec, resolvePiCommand } from "../extensions/lib/pi-runner.ts";
@@ -175,8 +179,11 @@ async function main(): Promise<number> {
 			historyFile,
 			["zz-history-older", "zz-history-newest"].map((text, at) => `${JSON.stringify({ cwd: work, text, at })}\n`).join(""),
 		);
+		// pi's own temp dir, standing in for sbox's private /tmp.
+		const piTmp = join(work, "pi-tmp");
+		mkdirSync(piTmp);
 		// PI_MCP is cleared so the MCP gate decides from the (empty) project dir.
-		tmux.start(`env -u PI_MCP PI_PROMPT_HISTORY_FILE=${shellQuote(historyFile)} ${piCommand}`, work);
+		tmux.start(`env -u PI_MCP TMPDIR=${shellQuote(piTmp)} PI_PROMPT_HISTORY_FILE=${shellQuote(historyFile)} ${piCommand}`, work);
 
 		// ---- startup ----------------------------------------------------------
 		log("startup");
@@ -249,6 +256,10 @@ async function main(): Promise<number> {
 			"pi keeps the terminal scrollback (not the alternate screen), so tmux copy-mode can scroll its transcript\n" +
 				'    pi is in fullscreen mode; set "tuiMode": "regular" in ~/.pi/agent/settings.json',
 		);
+		// Fill the transcript past one screen so copy-mode has scrollback to scroll.
+		tmux.submit(`!seq 1 ${ROWS * 2}`);
+		const filled = await waitUntil("scrollback", 15_000, () => Number(tmux.format("#{history_size}")) > 0);
+		f.check(filled, `pi's transcript goes into the pane's scrollback\n${screenTail(tmux)}`);
 		const client = tmux.attachClient();
 		const attached = await waitUntil("tmux client to attach", 10_000, () => tmux.run("list-clients").trim() !== "");
 		f.check(attached, "a tmux client is attached for the popup");
@@ -258,12 +269,18 @@ async function main(): Promise<number> {
 		tmux.keys("C-u");
 		const copyMode = await waitUntil("pi pane to enter copy-mode", 10_000, () => tmux.format("#{pane_in_mode}") === "1");
 		f.check(copyMode, `Ctrl+U puts the pi pane into tmux copy-mode\n${screenTail(tmux)}`);
-		const nvimUp = await waitUntil("nvim popup", 10_000, () =>
-			spawnSync("pgrep", ["-f", "nvim.*pi-scroll-compose-.*input\\.txt"], { stdio: "ignore" }).status === 0,
-		);
+		let nvimArgs = "";
+		const nvimUp = await waitUntil("nvim popup", 10_000, () => {
+			nvimArgs = spawnSync("pgrep", ["-af", "nvim.*pi-scroll-compose-.*input\\.txt"], { encoding: "utf8" }).stdout.trim();
+			return nvimArgs !== "";
+		});
 		f.check(nvimUp, `Ctrl+U opens nvim in a tmux popup\n${screenTail(tmux)}`);
 		if (nvimUp) {
+			f.check(!nvimArgs.includes(piTmp), `nvim's files are not in pi's temp dir (invisible to tmux under sbox)\n    ${nvimArgs}`);
 			await sleep(1500); // let nvim finish loading the user's config and our init.lua
+			client.stdin?.write("\x15"); // Ctrl+U in nvim: our mapping scrolls the pi pane
+			const scrolled = await waitUntil("pi pane to scroll", 5_000, () => Number(tmux.format("#{scroll_position}")) > 0);
+			f.check(scrolled, "Ctrl+U inside nvim scrolls the pi pane (our init.lua loaded)");
 			client.stdin?.write("A more\x1b");
 			await sleep(700);
 			client.stdin?.write("\x1b"); // normal-mode Esc: save + quit
@@ -272,6 +289,32 @@ async function main(): Promise<number> {
 			await expectScreen(/draft more/, "text edited in nvim lands in pi's editor");
 		}
 		f.check(!sees(/scroll-compose:/), `scroll-compose reported no error\n${screenTail(tmux)}`);
+
+		// An nvim that exits without running our init.lua (what sbox's private /tmp
+		// caused) must be reported, and must not leave Ctrl+U stuck at "already open".
+		log("scroll-compose, nvim never loads init.lua");
+		const stubBin = join(work, "stub-bin");
+		mkdirSync(stubBin);
+		writeFileSync(join(stubBin, "nvim"), "#!/bin/sh\nexit 0\n");
+		chmodSync(join(stubBin, "nvim"), 0o755);
+		const serverPath = tmux.run("show-environment", "-g", "PATH").trim().replace(/^PATH=/, "");
+		tmux.run("set-environment", "-g", "PATH", `${stubBin}:${serverPath}`); // popups run with the server's env
+		try {
+			// Each attempt adds its own error line, so #2 erroring again (not "already
+			// open") shows #1 released scroll-compose.
+			const errors = () => tmux.screen().match(/scroll-compose: nvim never loaded/g)?.length ?? 0;
+			for (const attempt of [1, 2]) {
+				tmux.keys("C-u");
+				const reported = await waitUntil("error notice", 15_000, () => errors() >= attempt);
+				f.check(reported, `Ctrl+U #${attempt} with a broken nvim reports the error\n${screenTail(tmux)}`);
+				const out = await waitUntil("copy-mode to end", 10_000, () => tmux.format("#{pane_in_mode}") === "0");
+				f.check(out, `Ctrl+U #${attempt} with a broken nvim leaves copy-mode`);
+				if (!out) tmux.run("send-keys", "-t", SESSION, "-X", "cancel");
+			}
+			f.check(!sees(/already open/), `a failed Ctrl+U does not leave scroll-compose stuck\n${screenTail(tmux)}`);
+		} finally {
+			tmux.run("set-environment", "-g", "PATH", serverPath);
+		}
 
 		// ---- prompt-history, written side -------------------------------------
 		const saved = readFileSync(historyFile, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { cwd: string; text: string });

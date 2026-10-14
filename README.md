@@ -126,6 +126,9 @@ Inside tmux, binds `ctrl+u` to:
 4. `<C-[>` / `<Esc>` in normal mode = save + force-quit (`:qa!`). Buffer-local, re-applied on `InsertLeave` so it beats plugin overrides.
 5. On nvim exit, pi's editor is **replaced** with the file contents and copy-mode is cancelled.
 6. If nvim is killed (SIGKILL), the editor is left untouched and the draft path is shown via `notify` (detected via PID poll).
+7. If nvim never loads the generated `init.lua` (it couldn't see the workspace, or `nvim` isn't what we expect), pi reports an error, cancels copy-mode and frees `ctrl+u` for the next try.
+
+The workspace (`init.lua`, draft, pidfile, done-marker) lives in `~/.pi/agent/scroll-compose/` (override: `PI_SCROLL_COMPOSE_DIR`), not in `/tmp`. nvim is started by the tmux server, outside any sandbox around pi, and sandboxes such as sbox (`firejail --private-tmp`) give pi a `/tmp` the tmux server can't see.
 
 Uses `display-popup` (not `split-window`) so pi's pane is not resized — preserves pi's tmux scrollback, which would otherwise be wiped by pi's full-redraw-on-resize.
 
