@@ -242,10 +242,13 @@ async function main(): Promise<number> {
 		await tmux.submitWithCompletion("/mcp load");
 		await expectScreen(/pi-mcp-adapter loaded for this session/, "/mcp load loads the adapter on demand", 30_000);
 		tmux.submit("/mcp");
-		const panel = await expectScreen(/Esc goes back|Run setup/, "/mcp now opens the adapter's panel", 30_000);
+		// Without configured servers the adapter shows its setup panel; with servers
+		// (e.g. in the user's ~/.pi/agent/mcp.json) it shows the server list.
+		const panelText = /Esc goes back|Run setup|esc clear\/close/;
+		const panel = await expectScreen(panelText, "/mcp now opens the adapter's panel", 30_000);
 		if (panel) {
 			tmux.keys("Escape");
-			const closed = await waitUntil("adapter panel to close", 10_000, () => !sees(/Esc goes back/));
+			const closed = await waitUntil("adapter panel to close", 10_000, () => !sees(panelText));
 			f.check(closed, `Esc closes the adapter's panel\n${screenTail(tmux)}`);
 		}
 
