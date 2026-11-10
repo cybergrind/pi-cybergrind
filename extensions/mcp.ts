@@ -1,13 +1,13 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { ENV_VAR, PROJECT_CONFIG_FILES, shouldLoadMcp, type GateDecision, type GateInput } from "./lib/mcp-gate.ts";
+import { ENV_VAR, shouldLoadMcp, type GateDecision, type GateInput } from "./lib/mcp-gate.ts";
 
 // Gated MCP support via pi-mcp-adapter.
 //
-// The adapter is loaded only when the session's project configures MCP
-// (`.mcp.json` or `.pi/mcp.json` in cwd) or `PI_MCP=on` is set. Without a
-// project config nothing from the adapter is imported or registered: no `mcp`
-// proxy tool, no adapter commands, zero context cost. `PI_MCP=off` disables it
-// unconditionally.
+// The adapter is loaded by default; its servers come from its layered config
+// (`~/.config/mcp/mcp.json` < `~/.pi/agent/mcp.json` < `.mcp.json` <
+// `.pi/mcp.json`). `PI_MCP=off` disables it: nothing from the adapter is
+// imported or registered (no `mcp` proxy tool, no adapter commands, zero
+// context cost).
 //
 // Gated-off sessions still get a tiny `/mcp` stub so the adapter can be pulled
 // in on demand (`/mcp load`) or its setup flow reached directly (`/mcp setup`)
@@ -82,12 +82,10 @@ export async function installCapturingMcpCommand(
 
 export function stubNotice(decision: GateDecision, cwd: string): string {
 	const why =
-		decision.reason === `${ENV_VAR}=off`
-			? `${ENV_VAR}=off is set in the environment`
-			: `no ${PROJECT_CONFIG_FILES.join(" or ")} in ${cwd}`;
+		decision.reason === `${ENV_VAR}=off` ? `${ENV_VAR}=off is set in the environment` : decision.reason;
 	return (
-		`MCP is off for this session: ${why}. ` +
-		`${ENV_VAR}=on forces it on. ` +
+		`MCP is off for this session: ${why} (cwd ${cwd}). ` +
+		`Unset ${ENV_VAR} to turn it back on. ` +
 		`/mcp setup configures servers (loads pi-mcp-adapter for this session); /mcp load loads it with the current config.`
 	);
 }
@@ -112,7 +110,7 @@ export function registerMcpStub(
 	const load = () => (loading ??= installCapturingMcpCommand(pi, installer));
 
 	pi.registerCommand(MCP_COMMAND, {
-		description: "MCP is off for this project — `/mcp setup` or `/mcp load` enables it for this session",
+		description: "MCP is off (PI_MCP=off) — `/mcp setup` or `/mcp load` enables it for this session",
 		getArgumentCompletions: (prefix) => {
 			const p = prefix.trimStart();
 			if (/\s/.test(p)) return null;

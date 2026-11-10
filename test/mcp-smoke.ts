@@ -10,11 +10,11 @@
 //
 // Runs (each a headless `pi -p --mode json --no-session --no-extensions` with
 // only extensions/mcp.ts and the probe fixture loaded):
-//   A  empty project dir            → adapter must NOT load (no `mcp` tool),
-//                                     but the gated-off `/mcp` stub command exists
-//   B  project dir with .mcp.json   → adapter loads, model searches and calls
-//                                     the server's tool through the proxy tool
-//   C  empty project dir, PI_MCP=on → adapter loads with zero servers
+//   A  empty project dir, PI_MCP=off → adapter must NOT load (no `mcp` tool),
+//                                      but the gated-off `/mcp` stub command exists
+//   B  project dir with .mcp.json    → adapter loads, model searches and calls
+//                                      the server's tool through the proxy tool
+//   C  empty project dir, no PI_MCP  → adapter loads by default (global servers only)
 
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -258,13 +258,13 @@ async function main(): Promise<number> {
 
 	try {
 		// ---- Run A: gated off -------------------------------------------------
-		const a = await runPi({ cwd: mkProject(), prompt: "Reply with exactly the word OK. Use no tools." });
+		const a = await runPi({ cwd: mkProject(), env: { PI_MCP: "off" }, prompt: "Reply with exactly the word OK. Use no tools." });
 		summarize("A(gated-off)", a);
 		f.check(!a.timedOut, "A: timed out");
 		f.check(a.exitCode === 0, `A: exit code ${a.exitCode}\n${stderrTail(a)}`);
 		f.check(a.tools !== undefined, "A: probe line missing (mcp-probe extension did not report)");
 		const leakedA = (a.tools ?? []).filter(isMcpTool);
-		f.check(leakedA.length === 0, `A: MCP tools registered without project config: ${leakedA.join(", ")}`);
+		f.check(leakedA.length === 0, `A: MCP tools registered with PI_MCP=off: ${leakedA.join(", ")}`);
 		f.check(a.starts.length === 0, `A: unexpected tool calls: ${a.starts.map((s) => s.toolName).join(", ")}`);
 		f.check(a.commands !== undefined, "A: probe did not report commands");
 		f.check((a.commands ?? []).includes("mcp"), `A: gated-off /mcp stub missing; commands=${(a.commands ?? []).join(",")}`);
@@ -309,12 +309,12 @@ async function main(): Promise<number> {
 		}
 		f.check(b.finalText.includes(target.tool), `B: final text does not mention ${target.tool}: "${b.finalText.slice(0, 200)}"`);
 
-		// ---- Run C: env override -----------------------------------------------
-		const c = await runPi({ cwd: mkProject(), env: { PI_MCP: "on" }, prompt: "Reply with exactly the word OK. Use no tools." });
-		summarize("C(PI_MCP=on)", c);
+		// ---- Run C: default on ------------------------------------------------
+		const c = await runPi({ cwd: mkProject(), prompt: "Reply with exactly the word OK. Use no tools." });
+		summarize("C(default)", c);
 		f.check(!c.timedOut, "C: timed out");
 		f.check(c.exitCode === 0, `C: exit code ${c.exitCode}\n${stderrTail(c)}`);
-		f.check((c.tools ?? []).includes("mcp"), `C: PI_MCP=on did not load the adapter; tools=${(c.tools ?? []).join(",")}`);
+		f.check((c.tools ?? []).includes("mcp"), `C: adapter not loaded by default; tools=${(c.tools ?? []).join(",")}`);
 		f.check(/\bOK\b/.test(c.finalText), `C: final text not OK: "${c.finalText}"`);
 	} finally {
 		for (const d of dirs) rmSync(d, { recursive: true, force: true });

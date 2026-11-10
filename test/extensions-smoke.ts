@@ -77,11 +77,11 @@ async function main(): Promise<number> {
 		"---\ndescription: smoke template\nargument-hint: <word>\n---\nReply with exactly the word $1 and nothing else. Use no tools.\n",
 	);
 
-	// PI_MCP must not leak in from the caller's shell: the gate decides from the project dir.
+	// PI_MCP=off so `/mcp status` reaches the gated-off stub (MCP is on by default).
 	const pi = new RpcDriver({
 		cwd: project,
 		args: ["--no-extensions", "-e", ROOT, "-e", PROBE_EXT],
-		env: { PI_MCP: undefined },
+		env: { PI_MCP: "off" },
 	});
 
 	try {
@@ -108,7 +108,7 @@ async function main(): Promise<number> {
 		// ---- 2. dispatch ------------------------------------------------------
 		log("2. dispatch");
 		for (const [command, expected] of [
-			["/mcp status", /^MCP is off for this session: no \.mcp\.json or \.pi\/mcp\.json/],
+			["/mcp status", /^MCP is off for this session: PI_MCP=off is set/],
 			["/subagent", /^\/subagent: provide a task description$/],
 			["/subagent-interactive", /^\/subagent-interactive: provide a task description$/],
 			["/subagent-switch", /^no interactive subagents/],

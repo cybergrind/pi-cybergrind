@@ -2,13 +2,15 @@ import { statSync } from "node:fs";
 import { join } from "node:path";
 
 // Decides whether the pi-mcp-adapter should be loaded for a session.
+// MCP is on by default (servers come from the adapter's layered config,
+// including the global ~/.pi/agent/mcp.json); `PI_MCP=off` turns it off.
 // Pure logic: no pi imports, no adapter imports (unit tests run under
 // node --experimental-strip-types, which cannot digest the adapter's TS).
 
 /** Project-level MCP config files, relative to the session cwd. */
 export const PROJECT_CONFIG_FILES = [".mcp.json", ".pi/mcp.json"] as const;
 
-/** Override: `off`/`0`/`false` never loads, `on`/`1`/`true` always loads. */
+/** Override: `off`/`0`/`false` never loads, `on`/`1`/`true` always loads (the default). */
 export const ENV_VAR = "PI_MCP";
 
 export interface GateInput {
@@ -61,12 +63,6 @@ export function shouldLoadMcp(input: GateInput): GateDecision {
 	}
 
 	const base: Omit<GateDecision, "load" | "reason"> = warning ? { sources, warning } : { sources };
-	if (sources.length > 0) {
-		return { ...base, load: true, reason: `project config found: ${sources.join(", ")}` };
-	}
-	return {
-		...base,
-		load: false,
-		reason: `no project MCP config (${PROJECT_CONFIG_FILES.join(" or ")}) in ${input.cwd}`,
-	};
+	const reason = sources.length > 0 ? `project config found: ${sources.join(", ")}` : "on by default";
+	return { ...base, load: true, reason };
 }

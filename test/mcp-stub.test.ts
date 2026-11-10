@@ -55,18 +55,18 @@ function fakeAdapter() {
 
 describe("gated-off /mcp stub", () => {
 	const emptyDir = () => mkdtempSync(join(tmpdir(), "mcp-stub-"));
+	const OFF = { PI_MCP: "off" };
 
 	test("stub is registered only when the gate is off", async () => {
 		const dir = emptyDir();
 		try {
 			const off = fakePi();
 			const adapter = fakeAdapter();
-			await createGatedMcpExtension(adapter.installer, { cwd: dir, env: {} })(off.pi);
+			await createGatedMcpExtension(adapter.installer, { cwd: dir, env: OFF })(off.pi);
 			assert.equal(adapter.installs, 0);
 			assert.ok(off.commands.has(MCP_COMMAND), "stub /mcp registered");
 			assert.match(off.commands.get(MCP_COMMAND)?.description ?? "", /off/);
 
-			writeFileSync(join(dir, ".mcp.json"), "{}");
 			const on = fakePi();
 			const adapter2 = fakeAdapter();
 			await createGatedMcpExtension(adapter2.installer, { cwd: dir, env: {} })(on.pi);
@@ -82,7 +82,7 @@ describe("gated-off /mcp stub", () => {
 		try {
 			const { pi, commands } = fakePi();
 			const adapter = fakeAdapter();
-			await createGatedMcpExtension(adapter.installer, { cwd: dir, env: {} })(pi);
+			await createGatedMcpExtension(adapter.installer, { cwd: dir, env: OFF })(pi);
 			const stub = commands.get(MCP_COMMAND)!;
 			const { ctx, notices } = fakeCtx();
 			await stub.handler("", ctx);
@@ -90,8 +90,8 @@ describe("gated-off /mcp stub", () => {
 			assert.equal(adapter.installs, 0);
 			assert.equal(notices.length, 2);
 			assert.match(notices[0].message, /MCP is off/);
-			assert.match(notices[0].message, /\.mcp\.json/);
-			assert.match(notices[0].message, /PI_MCP=on/);
+			assert.match(notices[0].message, /PI_MCP=off is set/);
+			assert.match(notices[0].message, /Unset PI_MCP/);
 			assert.match(notices[0].message, /\/mcp setup/);
 			assert.ok(notices[0].message.includes(dir));
 		} finally {
@@ -124,7 +124,7 @@ describe("gated-off /mcp stub", () => {
 		try {
 			const { pi, commands } = fakePi();
 			const adapter = fakeAdapter();
-			await createGatedMcpExtension(adapter.installer, { cwd: dir, env: {} })(pi);
+			await createGatedMcpExtension(adapter.installer, { cwd: dir, env: OFF })(pi);
 			const stub = commands.get(MCP_COMMAND)!;
 			const { ctx, notices } = fakeCtx();
 			await stub.handler("load", ctx);
@@ -143,7 +143,7 @@ describe("gated-off /mcp stub", () => {
 		try {
 			const { pi, commands } = fakePi();
 			const adapter = fakeAdapter();
-			await createGatedMcpExtension(adapter.installer, { cwd: dir, env: {} })(pi);
+			await createGatedMcpExtension(adapter.installer, { cwd: dir, env: OFF })(pi);
 			const stub = commands.get(MCP_COMMAND)!;
 			const { ctx } = fakeCtx();
 			await stub.handler("setup", ctx);
@@ -160,7 +160,7 @@ describe("gated-off /mcp stub", () => {
 		try {
 			const { pi, commands } = fakePi();
 			const adapter = fakeAdapter();
-			await createGatedMcpExtension(adapter.installer, { cwd: dir, env: {} })(pi);
+			await createGatedMcpExtension(adapter.installer, { cwd: dir, env: OFF })(pi);
 			const stub = commands.get(MCP_COMMAND)!;
 			const { ctx } = fakeCtx();
 			await Promise.all([stub.handler("load", ctx), stub.handler("setup", ctx)]);
@@ -176,7 +176,7 @@ describe("gated-off /mcp stub", () => {
 		try {
 			const { pi, commands } = fakePi();
 			let installs = 0;
-			await createGatedMcpExtension(async () => { installs++; }, { cwd: dir, env: {} })(pi);
+			await createGatedMcpExtension(async () => { installs++; }, { cwd: dir, env: OFF })(pi);
 			const stub = commands.get(MCP_COMMAND)!;
 			const { ctx, notices } = fakeCtx();
 			await stub.handler("setup", ctx);
@@ -191,7 +191,7 @@ describe("gated-off /mcp stub", () => {
 		const dir = emptyDir();
 		try {
 			const { pi, commands } = fakePi();
-			await createGatedMcpExtension(fakeAdapter().installer, { cwd: dir, env: {} })(pi);
+			await createGatedMcpExtension(fakeAdapter().installer, { cwd: dir, env: OFF })(pi);
 			const stub = commands.get(MCP_COMMAND)!;
 			const { ctx, notices } = fakeCtx(false);
 			const chunks: string[] = [];
@@ -216,7 +216,7 @@ describe("gated-off /mcp stub", () => {
 		const dir = emptyDir();
 		try {
 			const { pi, commands } = fakePi();
-			await createGatedMcpExtension(fakeAdapter().installer, { cwd: dir, env: {} })(pi);
+			await createGatedMcpExtension(fakeAdapter().installer, { cwd: dir, env: OFF })(pi);
 			const stub = commands.get(MCP_COMMAND)!;
 			const all = await stub.getArgumentCompletions!("");
 			assert.deepEqual((all ?? []).map((i) => i.value).sort(), ["load", "setup", "status"]);

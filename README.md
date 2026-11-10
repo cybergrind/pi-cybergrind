@@ -162,17 +162,16 @@ Smoke-test the live loop against a real pi: `npm run test:interactive` (honors `
 
 ### `mcp.ts`
 
-MCP servers via [`pi-mcp-adapter`](https://www.npmjs.com/package/pi-mcp-adapter), loaded **only when the project asks for it**. pi 0.99+ ships its own MCP support, which this extension replaces (see [pi 1.x settings](#pi-1x-settings)); the adapter exposes one `mcp` proxy tool (search / describe / call) instead of registering every server tool, and connects servers lazily on first use.
+MCP servers via [`pi-mcp-adapter`](https://www.npmjs.com/package/pi-mcp-adapter), **on by default**. pi 0.99+ ships its own MCP support, which this extension replaces (see [pi 1.x settings](#pi-1x-settings)); the adapter exposes one `mcp` proxy tool (search / describe / call) instead of registering every server tool, and connects servers lazily on first use.
 
 The gate runs at extension load (and again on `/reload`):
 
-- `.mcp.json` or `.pi/mcp.json` exists in the session cwd → the adapter is imported and installed. It then reads its normal config layering (`~/.config/mcp/mcp.json` < `~/.pi/agent/mcp.json` < `.mcp.json` < `.pi/mcp.json`).
-- Neither exists → the adapter is not imported: no `mcp` tool, no adapter commands, zero context cost. Only a tiny `/mcp` stub is registered so MCP can be enabled on demand for the current session:
+- By default the adapter is imported and installed in every session. It reads its normal config layering (`~/.config/mcp/mcp.json` < `~/.pi/agent/mcp.json` < `.mcp.json` < `.pi/mcp.json`), so servers you want everywhere go in `~/.pi/agent/mcp.json` and project-specific ones in the project file.
+- `PI_MCP=off` disables it: the adapter is not imported, no `mcp` tool, no adapter commands, zero context cost. Only a tiny `/mcp` stub is registered so MCP can still be enabled on demand for the current session:
   - `/mcp` or `/mcp status` explains why MCP is off and how to turn it on.
-  - `/mcp setup` (or any other adapter subcommand, e.g. `/mcp add …`) loads the adapter into the running session and forwards the call, so you land straight in the adapter's setup panel for initial configuration.
-  - `/mcp load` loads the adapter with whatever config it finds (useful with global-only configs). After loading, `/mcp` is the adapter's own command; repeated loads are no-ops.
-- `PI_MCP=off` keeps the stub but never auto-loads, even with a project config; an explicit `/mcp load` still wins.
-- `PI_MCP=off` disables it unconditionally; `PI_MCP=on` forces it (e.g. to use only global servers in a project without its own file). `PI_MCP_DEBUG=1` logs the decision to stderr.
+  - `/mcp setup` (or any other adapter subcommand, e.g. `/mcp add …`) loads the adapter into the running session and forwards the call, so you land straight in the adapter's setup panel.
+  - `/mcp load` loads the adapter with whatever config it finds. After loading, `/mcp` is the adapter's own command; repeated loads are no-ops.
+- `PI_MCP=on` is accepted and is the same as the default. `PI_MCP_DEBUG=1` logs the decision to stderr.
 
 Example `.mcp.json` for a local Binary Ninja UI MCP server:
 

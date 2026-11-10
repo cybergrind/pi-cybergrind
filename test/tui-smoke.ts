@@ -182,8 +182,8 @@ async function main(): Promise<number> {
 		// pi's own temp dir, standing in for sbox's private /tmp.
 		const piTmp = join(work, "pi-tmp");
 		mkdirSync(piTmp);
-		// PI_MCP is cleared so the MCP gate decides from the (empty) project dir.
-		tmux.start(`env -u PI_MCP TMPDIR=${shellQuote(piTmp)} PI_PROMPT_HISTORY_FILE=${shellQuote(historyFile)} ${piCommand}`, work);
+		// PI_MCP=off so the mcp step exercises the gated-off stub (MCP is on by default).
+		tmux.start(`env PI_MCP=off TMPDIR=${shellQuote(piTmp)} PI_PROMPT_HISTORY_FILE=${shellQuote(historyFile)} ${piCommand}`, work);
 
 		// ---- startup ----------------------------------------------------------
 		log("startup");
@@ -238,7 +238,7 @@ async function main(): Promise<number> {
 		// ---- mcp --------------------------------------------------------------
 		log("mcp");
 		tmux.submit("/mcp");
-		await expectScreen(/MCP is off for this session/, "/mcp shows the gated-off notice in a project without MCP config");
+		await expectScreen(/MCP is off for this session/, "/mcp shows the gated-off notice with PI_MCP=off");
 		await tmux.submitWithCompletion("/mcp load");
 		await expectScreen(/pi-mcp-adapter loaded for this session/, "/mcp load loads the adapter on demand", 30_000);
 		tmux.submit("/mcp");

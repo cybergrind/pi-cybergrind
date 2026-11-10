@@ -21,11 +21,11 @@ describe("shouldLoadMcp", () => {
 		assert.equal(ENV_VAR, "PI_MCP");
 	});
 
-	test("empty dir → do not load", () => {
+	test("empty dir → load by default", () => {
 		withTempDir((dir) => {
 			const d = shouldLoadMcp({ cwd: dir, env: {} });
-			assert.equal(d.load, false);
-			assert.match(d.reason, /no project/i);
+			assert.equal(d.load, true);
+			assert.match(d.reason, /default/i);
 			assert.deepEqual(d.sources, []);
 			assert.equal(d.warning, undefined);
 		});
@@ -61,11 +61,19 @@ describe("shouldLoadMcp", () => {
 		});
 	});
 
-	test("a directory named .mcp.json does not count", () => {
+	test("a directory named .mcp.json does not count as a source", () => {
 		withTempDir((dir) => {
 			mkdirSync(join(dir, ".mcp.json"));
 			const d = shouldLoadMcp({ cwd: dir, env: {} });
+			assert.deepEqual(d.sources, []);
+		});
+	});
+
+	test("PI_MCP=off disables in an empty dir", () => {
+		withTempDir((dir) => {
+			const d = shouldLoadMcp({ cwd: dir, env: { PI_MCP: "off" } });
 			assert.equal(d.load, false);
+			assert.match(d.reason, /PI_MCP=off/);
 		});
 	});
 
@@ -91,22 +99,18 @@ describe("shouldLoadMcp", () => {
 		});
 	});
 
-	test("PI_MCP=garbage → auto with a warning", () => {
+	test("PI_MCP=garbage → default (on) with a warning", () => {
 		withTempDir((dir) => {
-			const off = shouldLoadMcp({ cwd: dir, env: { PI_MCP: "garbage" } });
-			assert.equal(off.load, false);
-			assert.match(off.warning ?? "", /garbage/);
-			writeFileSync(join(dir, ".mcp.json"), "{}");
-			const on = shouldLoadMcp({ cwd: dir, env: { PI_MCP: "garbage" } });
-			assert.equal(on.load, true);
-			assert.match(on.warning ?? "", /garbage/);
+			const d = shouldLoadMcp({ cwd: dir, env: { PI_MCP: "garbage" } });
+			assert.equal(d.load, true);
+			assert.match(d.warning ?? "", /garbage/);
 		});
 	});
 
 	test("empty PI_MCP is treated as unset", () => {
 		withTempDir((dir) => {
 			const d = shouldLoadMcp({ cwd: dir, env: { PI_MCP: "  " } });
-			assert.equal(d.load, false);
+			assert.equal(d.load, true);
 			assert.equal(d.warning, undefined);
 		});
 	});
@@ -135,13 +139,13 @@ describe("createGatedMcpExtension", () => {
 		});
 	});
 
-	test("installer is not called when the gate fails", async () => {
+	test("installer is not called when PI_MCP=off", async () => {
 		let calls = 0;
 		let ext: ReturnType<typeof createGatedMcpExtension> | undefined;
 		withTempDir((dir) => {
 			ext = createGatedMcpExtension(async () => {
 				calls++;
-			}, { cwd: dir, env: {} });
+			}, { cwd: dir, env: { PI_MCP: "off" } });
 		});
 		registered.length = 0;
 		await ext!(fakePi);
@@ -158,6 +162,20 @@ describe("createGatedMcpExtension", () => {
 				throw new Error("boom");
 			}, { cwd: dir, env: {} });
 			await assert.rejects(() => ext!(fakePi), /boom/);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("no config and no PI_MCP installs by default", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "mcp-gate-"));
+		try {
+			let calls = 0;
+			const ext = createGatedMcpExtension(async () => {
+				calls++;
+			}, { cwd: dir, env: {} });
+			await ext(fakePi);
+			assert.equal(calls, 1);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
